@@ -14,8 +14,8 @@
 (function() {
     'use strict';
 
-    // Replace with your Vercel deployment URL
-    const SERVER_URL = 'https://mep-k8ekl52hu-dawye28s-projects.vercel.app';
+    // Vercel deployment URL - use the public production URL
+    const SERVER_URL = 'https://mep-lyart.vercel.app';
 
     const state = {
         matches: [],
