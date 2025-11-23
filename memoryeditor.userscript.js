@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Advanced Memory Editor Pro
 // @namespace    http://tampermonkey.net/
-// @version      2.1
+// @version      2.2
 // @description  Professional memory scanner and editor with advanced filtering, fuzzy search, value tracking, and modern UI
 // @author       You
 // @match        *://*/*
