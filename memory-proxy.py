@@ -18,6 +18,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         """Custom logging"""
         print(f"[{self.log_date_time_string()}] {format % args}")
+        sys.stdout.flush()  # Force immediate output
     
     def do_OPTIONS(self):
         """Handle CORS preflight"""
@@ -42,6 +43,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
             }
             self.wfile.write(json.dumps(response).encode())
             print("✅ Health check OK")
+            sys.stdout.flush()  # Force immediate output
         else:
             self.send_response(404)
             self.end_headers()
@@ -64,6 +66,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 print(f"Data keys: {list(data.keys())}")
                 print("\nRequest payload:")
                 print(json.dumps(data, indent=2)[:500] + "..." if len(json.dumps(data)) > 500 else json.dumps(data, indent=2))
+                sys.stdout.flush()  # Force immediate output
                 
                 # Forward to Vercel
                 print("\n📤 Forwarding to Vercel...")
@@ -93,13 +96,16 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 print("\nFull response:")
                 print(json.dumps(result, indent=2))
                 print("="*70 + "\n")
+                sys.stdout.flush()  # Force immediate output
                 
             except requests.exceptions.Timeout:
                 print("⏱️ Vercel timeout")
+                sys.stdout.flush()
                 self.send_error(504, "Server timeout")
                 
             except Exception as e:
                 print(f"❌ Error: {e}")
+                sys.stdout.flush()
                 self.send_response(500)
                 self.send_header('Content-Type', 'application/json')
                 self.send_header('Access-Control-Allow-Origin', '*')
@@ -114,14 +120,14 @@ def run_server():
     """Run the proxy server"""
     server = HTTPServer(('127.0.0.1', PORT), ProxyHandler)
     
-    print("=" * 70)
-    print("🚀 MEMORY SCANNER PROXY - RUNNING")
-    print("=" * 70)
-    print(f"📡 Vercel Server: {VERCEL_URL}")
-    print(f"🌐 Local Address: http://localhost:{PORT}")
-    print(f"✅ Status: Ready to receive requests")
-    print("=" * 70)
-    print("\nPress Ctrl+C to stop the server\n")
+    print("=" * 70, flush=True)
+    print("🚀 MEMORY SCANNER PROXY - RUNNING", flush=True)
+    print("=" * 70, flush=True)
+    print(f"📡 Vercel Server: {VERCEL_URL}", flush=True)
+    print(f"🌐 Local Address: http://localhost:{PORT}", flush=True)
+    print(f"✅ Status: Ready to receive requests", flush=True)
+    print("=" * 70, flush=True)
+    print("\nPress Ctrl+C to stop the server\n", flush=True)
     
     try:
         server.serve_forever()
