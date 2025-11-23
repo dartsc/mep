@@ -6,7 +6,9 @@
 // @author       You
 // @match        *://*/*
 // @grant        GM_xmlhttpRequest
+// @grant        GM.xmlHttpRequest
 // @connect      localhost
+// @connect      127.0.0.1
 // @connect      vercel.app
 // @connect      *
 // ==/UserScript==
@@ -1114,21 +1116,32 @@
     // Server-side deep scan
     async function serverScan(searchValue, searchType, includeStrings) {
         try {
+            console.log('🔍 Starting server scan...');
+            console.log('Server URL:', SERVER_URL);
+            
             // Check if server is available using GM_xmlhttpRequest (bypasses CSP)
             await new Promise((resolve, reject) => {
+                console.log('Testing server connection...');
                 GM_xmlhttpRequest({
                     method: 'GET',
                     url: `${SERVER_URL}/health`,
                     timeout: 5000,
                     onload: (response) => {
+                        console.log('Health check response:', response.status, response.responseText);
                         if (response.status === 200) {
                             resolve();
                         } else {
                             reject(new Error('Server not available'));
                         }
                     },
-                    onerror: () => reject(new Error('Server not available')),
-                    ontimeout: () => reject(new Error('Server timeout'))
+                    onerror: (err) => {
+                        console.error('Health check error:', err);
+                        reject(new Error('Server not available'));
+                    },
+                    ontimeout: () => {
+                        console.error('Health check timeout');
+                        reject(new Error('Server timeout'));
+                    }
                 });
             });
             
@@ -1181,6 +1194,7 @@
             };
             
             const result = await new Promise((resolve, reject) => {
+                console.log('Sending scan request with payload size:', JSON.stringify(payload).length, 'bytes');
                 GM_xmlhttpRequest({
                     method: 'POST',
                     url: `${SERVER_URL}/scan`,
@@ -1188,18 +1202,26 @@
                     data: JSON.stringify(payload),
                     timeout: 60000, // 60 second timeout for deep scans
                     onload: (response) => {
+                        console.log('Scan response:', response.status, response.responseText.substring(0, 200));
                         if (response.status === 200) {
                             try {
                                 resolve(JSON.parse(response.responseText));
                             } catch(e) {
+                                console.error('Parse error:', e);
                                 reject(new Error('Invalid server response'));
                             }
                         } else {
                             reject(new Error('Server scan failed'));
                         }
                     },
-                    onerror: () => reject(new Error('Server request failed')),
-                    ontimeout: () => reject(new Error('Server timeout'))
+                    onerror: (err) => {
+                        console.error('Scan request error:', err);
+                        reject(new Error('Server request failed'));
+                    },
+                    ontimeout: () => {
+                        console.error('Scan request timeout');
+                        reject(new Error('Server timeout'));
+                    }
                 });
             });
             
