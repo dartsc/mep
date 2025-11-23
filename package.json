@@ -5,7 +5,8 @@
   "main": "scan-server.js",
   "scripts": {
     "start": "node scan-server.js",
-    "dev": "nodemon scan-server.js"
+    "dev": "nodemon scan-server.js",
+    "vercel-build": "echo 'Build complete'"
   },
   "keywords": ["memory", "scanner", "game", "cheat"],
   "author": "You",
