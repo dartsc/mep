@@ -1,18 +1,21 @@
 // ==UserScript==
 // @name         Advanced Memory Editor Pro
 // @namespace    http://tampermonkey.net/
-// @version      2.0
+// @version      2.1
 // @description  Professional memory scanner and editor with advanced filtering, fuzzy search, value tracking, and modern UI
 // @author       You
 // @match        *://*/*
 // @grant        GM_xmlhttpRequest
 // @connect      localhost
+// @connect      vercel.app
+// @connect      *
 // ==/UserScript==
 
 (function() {
     'use strict';
 
-    const SERVER_URL = 'http://localhost:3333';
+    // Replace with your Vercel deployment URL
+    const SERVER_URL = 'https://your-project.vercel.app';
 
     const state = {
         matches: [],
@@ -1116,7 +1119,7 @@
                 GM_xmlhttpRequest({
                     method: 'GET',
                     url: `${SERVER_URL}/health`,
-                    timeout: 2000,
+                    timeout: 5000,
                     onload: (response) => {
                         if (response.status === 200) {
                             resolve();
