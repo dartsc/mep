@@ -1074,8 +1074,8 @@
     }
 
     // Serialize window object for server-side scanning
-    function serializeForServer(obj, visited = new WeakSet(), depth = 0, maxDepth = 50) {
-        if (depth > maxDepth) return null;
+    function serializeForServer(obj, visited = new WeakSet(), depth = 0, maxDepth = 10) {
+        if (depth > maxDepth) return '[MaxDepth]';
         if (!obj || typeof obj !== 'object') {
             // Handle BigInt values
             if (typeof obj === 'bigint') {
@@ -1085,40 +1085,61 @@
         }
         if (visited.has(obj)) return '[Circular]';
         
+        // Skip DOM elements and large objects
+        if (obj instanceof Element || obj instanceof Node) return '[DOMNode]';
+        if (obj instanceof Window) return '[Window]';
+        if (obj instanceof Document) return '[Document]';
+        
         visited.add(obj);
         
         try {
             if (Array.isArray(obj)) {
-                return obj.slice(0, 100).map(item => serializeForServer(item, visited, depth + 1, maxDepth));
+                // Limit array size based on depth
+                const limit = depth > 5 ? 10 : 50;
+                return obj.slice(0, limit).map(item => serializeForServer(item, visited, depth + 1, maxDepth));
             }
             
             const serialized = {};
             const keys = Object.keys(obj);
             
-            // Limit keys to prevent massive payloads
-            for (let i = 0; i < Math.min(keys.length, 1000); i++) {
+            // Aggressively limit keys based on depth
+            const keyLimit = depth > 5 ? 50 : depth > 3 ? 200 : 500;
+            
+            for (let i = 0; i < Math.min(keys.length, keyLimit); i++) {
                 const key = keys[i];
                 try {
                     const val = obj[key];
                     const valType = typeof val;
                     
-                    if (valType === 'function') continue;
-                    if (key === 'window' || key === 'document' || key === 'parent' || key === 'top') continue;
+                    // Skip functions, symbols, and problematic keys
+                    if (valType === 'function' || valType === 'symbol') continue;
+                    if (key === 'window' || key === 'document' || key === 'parent' || key === 'top' || 
+                        key === 'frameElement' || key === 'opener' || key === 'self') continue;
                     
                     // Handle BigInt values
                     if (valType === 'bigint') {
                         serialized[key] = val.toString();
                     } else if (valType === 'object' && val !== null) {
+                        // Skip very large objects at deeper levels
+                        if (depth > 5 && val.constructor && val.constructor.name) {
+                            const typeName = val.constructor.name;
+                            if (typeName.includes('Array') || typeName.includes('Map') || typeName.includes('Set')) {
+                                serialized[key] = `[${typeName}]`;
+                                continue;
+                            }
+                        }
                         serialized[key] = serializeForServer(val, visited, depth + 1, maxDepth);
                     } else {
                         serialized[key] = val;
                     }
-                } catch(e) {}
+                } catch(e) {
+                    // Skip properties that throw errors
+                }
             }
             
             return serialized;
         } catch(e) {
-            return null;
+            return '[Error]';
         }
     }
     
@@ -1164,54 +1185,84 @@
             
             showToast('📡 Sending data to server for ultra-deep scan...');
             
-            // Serialize window data
+            // Serialize window data with aggressive filtering
             const windowData = {};
-            const windowKeys = Object.keys(window);
+            const skipPrefixes = ['webkit', 'moz', 'chrome', 'on', 'CSS', 'HTML', 'SVG', 'Audio', 'Video', 'WebGL'];
+            const skipKeys = new Set(['window', 'self', 'top', 'parent', 'frames', 'frameElement', 'opener', 
+                'document', 'location', 'navigator', 'screen', 'history', 'performance', 'visualViewport',
+                'clientInformation', 'external', 'applicationCache', 'caches', 'crypto']);
+            
+            const windowKeys = Object.keys(window).filter(key => {
+                // Skip system prefixes
+                if (skipPrefixes.some(prefix => key.startsWith(prefix))) return false;
+                // Skip known problematic keys
+                if (skipKeys.has(key)) return false;
+                // Skip DOM-related constructors
+                if (key.endsWith('Element') || key.endsWith('List') || key.endsWith('Collection')) return false;
+                return true;
+            }).slice(0, 200); // Limit to 200 keys
+            
+            console.log(`Serializing ${windowKeys.length} window properties...`);
             
             for (let key of windowKeys) {
                 try {
                     const val = window[key];
-                    if (typeof val === 'object' && val !== null && 
-                        !key.startsWith('webkit') && 
-                        !key.startsWith('moz') &&
-                        !key.startsWith('chrome') &&
-                        !key.startsWith('HTML') &&
-                        !key.startsWith('SVG') &&
-                        !key.startsWith('Web') &&
-                        key !== 'document' && 
-                        key !== 'location') {
+                    if (typeof val === 'object' && val !== null) {
                         windowData[key] = serializeForServer(val);
+                    } else if (typeof val !== 'function') {
+                        windowData[key] = val;
                     }
-                } catch(e) {}
+                } catch(e) {
+                    // Skip properties that throw errors
+                }
             }
             
-            // Add localStorage and sessionStorage
+            // Add localStorage and sessionStorage (with size limits)
             try {
                 windowData._localStorage = {};
-                for (let i = 0; i < localStorage.length; i++) {
+                const lsCount = Math.min(localStorage.length, 50);
+                for (let i = 0; i < lsCount; i++) {
                     const key = localStorage.key(i);
-                    windowData._localStorage[key] = localStorage.getItem(key);
+                    const val = localStorage.getItem(key);
+                    // Skip very large values
+                    if (val && val.length < 10000) {
+                        windowData._localStorage[key] = val;
+                    }
                 }
             } catch(e) {}
             
             try {
                 windowData._sessionStorage = {};
-                for (let i = 0; i < sessionStorage.length; i++) {
+                const ssCount = Math.min(sessionStorage.length, 50);
+                for (let i = 0; i < ssCount; i++) {
                     const key = sessionStorage.key(i);
-                    windowData._sessionStorage[key] = sessionStorage.getItem(key);
+                    const val = sessionStorage.getItem(key);
+                    // Skip very large values
+                    if (val && val.length < 10000) {
+                        windowData._sessionStorage[key] = val;
+                    }
                 }
             } catch(e) {}
             
+            console.log('Stringifying payload...');
+            const payloadStr = JSON.stringify(windowData, jsonReplacer);
+            console.log(`Payload size: ${payloadStr.length} characters`);
+            
+            // Check payload size before sending
+            if (payloadStr.length > 50 * 1024 * 1024) { // 50MB limit
+                throw new Error('Payload too large, falling back to client scan');
+            }
+            
             const payload = {
-                data: JSON.stringify(windowData, jsonReplacer),
+                data: payloadStr,
                 searchValue: searchValue,
                 searchType: searchType,
                 includeStrings: includeStrings,
-                maxDepth: 100
+                maxDepth: 10
             };
             
             const result = await new Promise((resolve, reject) => {
-                console.log('Sending scan request with payload size:', JSON.stringify(payload, jsonReplacer).length, 'bytes');
+                console.log('Sending scan request...');
                 GM_xmlhttpRequest({
                     method: 'POST',
                     url: `${SERVER_URL}/scan`,
