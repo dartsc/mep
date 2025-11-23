@@ -1243,7 +1243,8 @@
             
         } catch(err) {
             console.error('Server scan error:', err);
-            showToast('⚠️ Server unavailable, using client-side deep scan...');
+            console.error('Error details:', err.message, err.stack);
+            showToast(`❌ Server error: ${err.message}`);
             return null; // Fall back to client-side
         }
     }
@@ -1270,6 +1271,11 @@
             for (let key in obj) {
                 if (state.scanAborted) return;
                 try {
+                    // Skip properties that cause "Illegal invocation" errors
+                    if (key === 'ready' && (obj instanceof FontFaceSet || obj instanceof ServiceWorkerContainer)) {
+                        continue;
+                    }
+                    
                     const val = obj[key];
                     const fullPath = `${path}.${key}`;
 
@@ -1286,7 +1292,9 @@
                     if (typeof val === 'object' && val !== null && !visited.has(val)) {
                         deepScan(val, fullPath, visited, depth + 1, actualMaxDepth);
                     }
-                } catch(e) {}
+                } catch(e) {
+                    // Silently skip properties that can't be accessed
+                }
             }
             
             // Only do expensive operations if deep scan enabled
