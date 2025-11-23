@@ -1076,7 +1076,13 @@
     // Serialize window object for server-side scanning
     function serializeForServer(obj, visited = new WeakSet(), depth = 0, maxDepth = 50) {
         if (depth > maxDepth) return null;
-        if (!obj || typeof obj !== 'object') return obj;
+        if (!obj || typeof obj !== 'object') {
+            // Handle BigInt values
+            if (typeof obj === 'bigint') {
+                return obj.toString();
+            }
+            return obj;
+        }
         if (visited.has(obj)) return '[Circular]';
         
         visited.add(obj);
@@ -1099,7 +1105,10 @@
                     if (valType === 'function') continue;
                     if (key === 'window' || key === 'document' || key === 'parent' || key === 'top') continue;
                     
-                    if (valType === 'object' && val !== null) {
+                    // Handle BigInt values
+                    if (valType === 'bigint') {
+                        serialized[key] = val.toString();
+                    } else if (valType === 'object' && val !== null) {
                         serialized[key] = serializeForServer(val, visited, depth + 1, maxDepth);
                     } else {
                         serialized[key] = val;
@@ -1111,6 +1120,14 @@
         } catch(e) {
             return null;
         }
+    }
+    
+    // Custom JSON replacer to handle BigInt and other special types
+    function jsonReplacer(key, value) {
+        if (typeof value === 'bigint') {
+            return value.toString();
+        }
+        return value;
     }
 
     // Server-side deep scan
@@ -1186,7 +1203,7 @@
             } catch(e) {}
             
             const payload = {
-                data: JSON.stringify(windowData),
+                data: JSON.stringify(windowData, jsonReplacer),
                 searchValue: searchValue,
                 searchType: searchType,
                 includeStrings: includeStrings,
@@ -1194,12 +1211,12 @@
             };
             
             const result = await new Promise((resolve, reject) => {
-                console.log('Sending scan request with payload size:', JSON.stringify(payload).length, 'bytes');
+                console.log('Sending scan request with payload size:', JSON.stringify(payload, jsonReplacer).length, 'bytes');
                 GM_xmlhttpRequest({
                     method: 'POST',
                     url: `${SERVER_URL}/scan`,
                     headers: { 'Content-Type': 'application/json' },
-                    data: JSON.stringify(payload),
+                    data: JSON.stringify(payload, jsonReplacer),
                     timeout: 60000, // 60 second timeout for deep scans
                     onload: (response) => {
                         console.log('Scan response:', response.status, response.responseText.substring(0, 200));
@@ -1990,7 +2007,7 @@
             timestamp: new Date().toISOString()
         };
 
-        const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+        const blob = new Blob([JSON.stringify(data, jsonReplacer, 2)], {type: 'application/json'});
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
