@@ -14,8 +14,8 @@
 (function() {
     'use strict';
 
-    // Vercel deployment URL - use the public production URL
-    const SERVER_URL = 'https://mep-lyart.vercel.app';
+    // Local Python proxy server (forwards to Vercel)
+    const SERVER_URL = 'http://localhost:3334';
 
     const state = {
         matches: [],
