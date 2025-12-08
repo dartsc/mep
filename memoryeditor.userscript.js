@@ -16,7 +16,6 @@
 (function() {
     'use strict';
 
-    // Local Python proxy server (forwards to Vercel)
     const SERVER_URL = 'http://localhost:3334';
 
     const state = {
@@ -1073,11 +1072,9 @@
         });
     }
 
-    // Serialize window object for server-side scanning
     function serializeForServer(obj, visited = new WeakSet(), depth = 0, maxDepth = 10) {
         if (depth > maxDepth) return '[MaxDepth]';
         if (!obj || typeof obj !== 'object') {
-            // Handle BigInt values
             if (typeof obj === 'bigint') {
                 return obj.toString();
             }
@@ -1085,7 +1082,6 @@
         }
         if (visited.has(obj)) return '[Circular]';
         
-        // Skip DOM elements and large objects
         if (obj instanceof Element || obj instanceof Node) return '[DOMNode]';
         if (obj instanceof Window) return '[Window]';
         if (obj instanceof Document) return '[Document]';
@@ -1094,7 +1090,6 @@
         
         try {
             if (Array.isArray(obj)) {
-                // Limit array size based on depth
                 const limit = depth > 5 ? 10 : 50;
                 return obj.slice(0, limit).map(item => serializeForServer(item, visited, depth + 1, maxDepth));
             }
@@ -1102,7 +1097,6 @@
             const serialized = {};
             const keys = Object.keys(obj);
             
-            // Aggressively limit keys based on depth
             const keyLimit = depth > 5 ? 50 : depth > 3 ? 200 : 500;
             
             for (let i = 0; i < Math.min(keys.length, keyLimit); i++) {
@@ -1111,16 +1105,13 @@
                     const val = obj[key];
                     const valType = typeof val;
                     
-                    // Skip functions, symbols, and problematic keys
                     if (valType === 'function' || valType === 'symbol') continue;
                     if (key === 'window' || key === 'document' || key === 'parent' || key === 'top' || 
                         key === 'frameElement' || key === 'opener' || key === 'self') continue;
                     
-                    // Handle BigInt values
                     if (valType === 'bigint') {
                         serialized[key] = val.toString();
                     } else if (valType === 'object' && val !== null) {
-                        // Skip very large objects at deeper levels
                         if (depth > 5 && val.constructor && val.constructor.name) {
                             const typeName = val.constructor.name;
                             if (typeName.includes('Array') || typeName.includes('Map') || typeName.includes('Set')) {
@@ -1133,7 +1124,6 @@
                         serialized[key] = val;
                     }
                 } catch(e) {
-                    // Skip properties that throw errors
                 }
             }
             
@@ -1143,7 +1133,6 @@
         }
     }
     
-    // Custom JSON replacer to handle BigInt and other special types
     function jsonReplacer(key, value) {
         if (typeof value === 'bigint') {
             return value.toString();
@@ -1151,13 +1140,11 @@
         return value;
     }
 
-    // Server-side deep scan
     async function serverScan(searchValue, searchType, includeStrings) {
         try {
             console.log('🔍 Starting server scan...');
             console.log('Server URL:', SERVER_URL);
             
-            // Check if server is available using GM_xmlhttpRequest (bypasses CSP)
             await new Promise((resolve, reject) => {
                 console.log('Testing server connection...');
                 GM_xmlhttpRequest({
@@ -1185,7 +1172,6 @@
             
             showToast('📡 Sending data to server for ultra-deep scan...');
             
-            // Serialize window data with aggressive filtering
             const windowData = {};
             const skipPrefixes = ['webkit', 'moz', 'chrome', 'on', 'CSS', 'HTML', 'SVG', 'Audio', 'Video', 'WebGL'];
             const skipKeys = new Set(['window', 'self', 'top', 'parent', 'frames', 'frameElement', 'opener', 
@@ -1193,14 +1179,11 @@
                 'clientInformation', 'external', 'applicationCache', 'caches', 'crypto']);
             
             const windowKeys = Object.keys(window).filter(key => {
-                // Skip system prefixes
                 if (skipPrefixes.some(prefix => key.startsWith(prefix))) return false;
-                // Skip known problematic keys
                 if (skipKeys.has(key)) return false;
-                // Skip DOM-related constructors
                 if (key.endsWith('Element') || key.endsWith('List') || key.endsWith('Collection')) return false;
                 return true;
-            }).slice(0, 200); // Limit to 200 keys
+            }).slice(0, 200);
             
             console.log(`Serializing ${windowKeys.length} window properties...`);
             
@@ -1213,18 +1196,15 @@
                         windowData[key] = val;
                     }
                 } catch(e) {
-                    // Skip properties that throw errors
                 }
             }
             
-            // Add localStorage and sessionStorage (with size limits)
             try {
                 windowData._localStorage = {};
                 const lsCount = Math.min(localStorage.length, 50);
                 for (let i = 0; i < lsCount; i++) {
                     const key = localStorage.key(i);
                     const val = localStorage.getItem(key);
-                    // Skip very large values
                     if (val && val.length < 10000) {
                         windowData._localStorage[key] = val;
                     }
@@ -1237,7 +1217,6 @@
                 for (let i = 0; i < ssCount; i++) {
                     const key = sessionStorage.key(i);
                     const val = sessionStorage.getItem(key);
-                    // Skip very large values
                     if (val && val.length < 10000) {
                         windowData._sessionStorage[key] = val;
                     }
@@ -1248,8 +1227,7 @@
             const payloadStr = JSON.stringify(windowData, jsonReplacer);
             console.log(`Payload size: ${payloadStr.length} characters`);
             
-            // Check payload size before sending
-            if (payloadStr.length > 50 * 1024 * 1024) { // 50MB limit
+            if (payloadStr.length > 50 * 1024 * 1024) {
                 throw new Error('Payload too large, falling back to client scan');
             }
             
@@ -1268,7 +1246,7 @@
                     url: `${SERVER_URL}/scan`,
                     headers: { 'Content-Type': 'application/json' },
                     data: JSON.stringify(payload, jsonReplacer),
-                    timeout: 60000, // 60 second timeout for deep scans
+                    timeout: 60000,
                     onload: (response) => {
                         console.log('Scan response:', response.status, response.responseText.substring(0, 200));
                         if (response.status === 200) {
@@ -1294,12 +1272,11 @@
             });
             
             if (result.success) {
-                // Convert server matches back to our format
                 const serverMatches = result.matches.map(m => ({
                     path: m.path,
                     val: m.val,
                     type: m.type,
-                    obj: window, // Approximate - we can't reconstruct exact object reference
+                    obj: window,
                     key: m.path.split('.').pop()
                 }));
                 
@@ -1313,12 +1290,12 @@
             console.error('Server scan error:', err);
             console.error('Error details:', err.message, err.stack);
             showToast(`❌ Server error: ${err.message}`);
-            return null; // Fall back to client-side
+            return null;
         }
     }
 
     function deepScan(obj, path = 'window', visited = new WeakSet(), depth = 0, maxDepth = 10) {
-        if (state.scanAborted) return; // Check abort first
+        if (state.scanAborted) return;
         if (!obj || typeof obj !== 'object') return;
         if (visited.has(obj)) return;
         if (depth > maxDepth) return;
@@ -1329,17 +1306,14 @@
         const actualMaxDepth = deepScanEnabled ? 25 : 8;
         if (depth > actualMaxDepth) return;
         
-        // Update progress less frequently for speed
         if (depth < 2 && state.scanProgress++ % 500 === 0) {
             updateScanProgress();
         }
 
         try {
-            // Fast path: only scan enumerable properties
             for (let key in obj) {
                 if (state.scanAborted) return;
                 try {
-                    // Skip properties that cause "Illegal invocation" errors
                     if (key === 'ready' && (obj instanceof FontFaceSet || obj instanceof ServiceWorkerContainer)) {
                         continue;
                     }
@@ -1361,11 +1335,9 @@
                         deepScan(val, fullPath, visited, depth + 1, actualMaxDepth);
                     }
                 } catch(e) {
-                    // Silently skip properties that can't be accessed
                 }
             }
             
-            // Only do expensive operations if deep scan enabled
             if (deepScanEnabled && depth < actualMaxDepth - 5) {
                 try {
                     const proto = Object.getPrototypeOf(obj);
@@ -1400,14 +1372,12 @@
         state.scanAborted = false;
         const deepScanEnabled = gui.querySelector('#memDeepScan').checked;
         
-        // Priority 1: Scan all custom global variables (where games store data)
         try {
             const windowKeys = Object.keys(state.currentContext);
             windowKeys.forEach(key => {
                 if (state.scanAborted) return;
                 try {
                     const val = state.currentContext[key];
-                    // Skip browser internals, focus on custom objects
                     if (typeof val === 'object' && val !== null && 
                         !key.startsWith('webkit') && 
                         !key.startsWith('moz') &&
@@ -1431,7 +1401,6 @@
         
         if (state.scanAborted) return;
         
-        // Priority 2: localStorage/sessionStorage (saved game data)
         try {
             if (state.currentContext.localStorage) {
                 for (let i = 0; i < state.currentContext.localStorage.length; i++) {
@@ -1470,7 +1439,6 @@
             }
         } catch(e) {}
         
-        // Priority 3: Canvas (only if deep scan)
         if (deepScanEnabled && !state.scanAborted) {
             try {
                 const canvases = state.currentContext.document?.querySelectorAll('canvas') || [];
@@ -1580,7 +1548,6 @@
                 return showToast('⚠️ Need initial scan first!');
             }
             if ((searchType === 'increased' || searchType === 'decreased' || searchType === 'unchanged') && !searchValue) {
-                // These types don't need a search value
             } else if (!searchValue && searchType !== 'increased' && searchType !== 'decreased' && searchType !== 'unchanged') {
                 return showToast('⚠️ Enter a value to search!');
             }
@@ -1608,7 +1575,6 @@
         state.scanAborted = false;
 
         setTimeout(async () => {
-            // Use server-side scanning for initial deep scans
             if (!isNextScan && deepScanEnabled) {
                 const serverMatches = await serverScan(searchValue, searchType, gui.querySelector('#memStringSearch').checked);
                 
@@ -1639,11 +1605,9 @@
                     }
                     return;
                 }
-                // If server failed, fall through to client-side scan
             }
             
             if (isNextScan) {
-                // Store previous values for comparison
                 const previousValues = new Map(state.previousMatches.map(m => [m.path, m.val]));
                 
                 const newMatches = [];
@@ -1652,7 +1616,6 @@
                         const currentVal = m.obj[m.key];
                         m.val = currentVal;
                         
-                        // Store previous value for comparison
                         const prevMatch = state.previousMatches.find(pm => pm.path === m.path);
                         if (prevMatch) {
                             m.previousVal = prevMatch.val;
@@ -1665,7 +1628,6 @@
                 });
                 state.matches = newMatches;
             } else {
-                // Clear everything for fresh scan
                 state.matches = [];
                 scanCurrentContext();
             }
@@ -1933,8 +1895,6 @@
 
     function freezeGame() {
         if (state.gameFrozen) return;
-        
-        // Save original functions if not already saved
         if (!state.originalRAF) state.originalRAF = window.requestAnimationFrame;
         if (!state.originalSetTimeout) state.originalSetTimeout = window.setTimeout;
         if (!state.originalSetInterval) state.originalSetInterval = window.setInterval;
@@ -1962,7 +1922,6 @@
     function unfreezeGame() {
         if (!state.gameFrozen) return;
         
-        // Restore original functions
         if (state.originalRAF) {
             window.requestAnimationFrame = state.originalRAF;
         }
