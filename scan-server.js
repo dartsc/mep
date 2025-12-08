@@ -6,7 +6,6 @@ const PORT = 3333;
 app.use(cors());
 app.use(express.json({ limit: '500mb' }));
 
-// Deep scan function on server side
 function deepScan(obj, path = 'root', visited = new Set(), depth = 0, maxDepth = 100, matches = []) {
     if (depth > maxDepth) return matches;
     if (!obj || typeof obj !== 'object') return matches;
@@ -16,7 +15,6 @@ function deepScan(obj, path = 'root', visited = new Set(), depth = 0, maxDepth =
     visited.add(objId);
     
     try {
-        // Get all properties including non-enumerable
         const allKeys = new Set([
             ...Object.keys(obj),
             ...Object.getOwnPropertyNames(obj)
@@ -31,7 +29,6 @@ function deepScan(obj, path = 'root', visited = new Set(), depth = 0, maxDepth =
                 const fullPath = `${path}.${key}`;
                 const valType = typeof val;
                 
-                // Store all primitive values
                 if (valType === 'number' || valType === 'string' || valType === 'boolean') {
                     matches.push({
                         path: fullPath,
@@ -40,14 +37,12 @@ function deepScan(obj, path = 'root', visited = new Set(), depth = 0, maxDepth =
                     });
                 }
                 
-                // Recurse into objects
                 if (valType === 'object' && val !== null) {
                     deepScan(val, fullPath, visited, depth + 1, maxDepth, matches);
                 }
             } catch(e) {}
         }
         
-        // Scan prototype chain
         try {
             const proto = Object.getPrototypeOf(obj);
             if (proto && proto !== Object.prototype) {
@@ -58,7 +53,6 @@ function deepScan(obj, path = 'root', visited = new Set(), depth = 0, maxDepth =
             }
         } catch(e) {}
         
-        // Scan symbols
         try {
             const symbols = Object.getOwnPropertySymbols(obj);
             symbols.forEach((sym, i) => {
@@ -87,7 +81,6 @@ function deepScan(obj, path = 'root', visited = new Set(), depth = 0, maxDepth =
     return matches;
 }
 
-// Generate unique ID for objects
 let objectIdCounter = 0;
 const objectIdMap = new WeakMap();
 
@@ -98,7 +91,6 @@ function getObjectId(obj) {
     return objectIdMap.get(obj);
 }
 
-// Filter matches based on search criteria
 function filterMatches(matches, searchValue, searchType, includeStrings) {
     return matches.filter(m => {
         const val = m.val;
@@ -140,7 +132,6 @@ function filterMatches(matches, searchValue, searchType, includeStrings) {
     });
 }
 
-// POST endpoint to receive serialized data and scan
 app.post('/scan', (req, res) => {
     try {
         const { data, searchValue, searchType, includeStrings, maxDepth = 100 } = req.body;
@@ -148,16 +139,13 @@ app.post('/scan', (req, res) => {
         console.log(`Starting deep scan (depth: ${maxDepth})...`);
         const startTime = Date.now();
         
-        // Parse the serialized data
         const parsedData = JSON.parse(data);
         
-        // Perform deep scan
         const matches = [];
         deepScan(parsedData, 'window', new Set(), 0, maxDepth, matches);
         
         console.log(`Found ${matches.length} total properties`);
         
-        // Filter matches based on search criteria
         const filtered = searchValue ? filterMatches(matches, searchValue, searchType, includeStrings) : matches;
         
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
@@ -180,7 +168,6 @@ app.post('/scan', (req, res) => {
     }
 });
 
-// Health check
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: Date.now() });
 });
